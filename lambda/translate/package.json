@@ -1,0 +1,9 @@
+{
+  "name": "translate-lambda",
+  "version": "1.0.0",
+  "description": "AWS Translate Lambda function",
+  "main": "index.js",
+  "dependencies": {
+    "@aws-sdk/client-translate": "^3.0.0"
+  }
+} 

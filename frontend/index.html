@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Translate Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .translate-form {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        label {
+            font-weight: bold;
+            color: #555;
+        }
+
+        textarea {
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s ease;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .language-selectors {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        select {
+            padding: 10px 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .translate-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .translate-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .translate-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .loading {
+            text-align: center;
+            color: #667eea;
+            font-style: italic;
+        }
+
+        .error {
+            background: #fee;
+            border-left-color: #e74c3c;
+            color: #c0392b;
+        }
+
+        .error details {
+            margin-top: 10px;
+        }
+
+        .error summary {
+            cursor: pointer;
+            font-weight: bold;
+            padding: 5px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            user-select: none;
+        }
+
+        .error summary:hover {
+            background: #e0e0e0;
+        }
+
+        .error pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .arrow {
+            font-size: 24px;
+            color: #667eea;
+        }
+
+        @media (max-width: 600px) {
+            .language-selectors {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 AWS Translate Demo</h1>
+        
+        <form class="translate-form" id="translateForm">
+            <div class="input-group">
+                <label for="inputText">翻訳したいテキストを入力してください：</label>
+                <textarea 
+                    id="inputText" 
+                    placeholder="ここにテキストを入力してください..."
+                    required
+                ></textarea>
+            </div>
+
+            <div class="language-selectors">
+                <div>
+                    <label for="sourceLang">翻訳元言語：</label>
+                    <select id="sourceLang">
+                        <option value="auto">自動検出</option>
+                        <option value="ja">日本語</option>
+                        <option value="en">英語</option>
+                        <option value="ko">韓国語</option>
+                        <option value="zh">中国語</option>
+                        <option value="es">スペイン語</option>
+                        <option value="fr">フランス語</option>
+                        <option value="de">ドイツ語</option>
+                    </select>
+                </div>
+
+                <div class="arrow">→</div>
+
+                <div>
+                    <label for="targetLang">翻訳先言語：</label>
+                    <select id="targetLang">
+                        <option value="ja">日本語</option>
+                        <option value="en">英語</option>
+                        <option value="ko">韓国語</option>
+                        <option value="zh">中国語</option>
+                        <option value="es">スペイン語</option>
+                        <option value="fr">フランス語</option>
+                        <option value="de">ドイツ語</option>
+                    </select>
+                </div>
+            </div>
+
+            <button type="submit" class="translate-btn" id="translateBtn">
+                🔄 翻訳する
+            </button>
+        </form>
+
+        <div id="result" style="display: none;"></div>
+    </div>
+
+    <script>
+        // API Gateway URLを相対パスで設定
+        const API_URL = './translate';
+
+        document.getElementById('translateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const inputText = document.getElementById('inputText').value;
+            const sourceLang = document.getElementById('sourceLang').value;
+            const targetLang = document.getElementById('targetLang').value;
+            const resultDiv = document.getElementById('result');
+            const translateBtn = document.getElementById('translateBtn');
+
+            // ボタンを無効化
+            translateBtn.disabled = true;
+            translateBtn.textContent = '翻訳中...';
+
+            // 結果エリアを表示
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading">翻訳中です...</div>';
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        text: inputText,
+                        sourceLang: sourceLang,
+                        targetLang: targetLang
+                    })
+                });
+
+                let data;
+                let responseText = '';
+                
+                try {
+                    responseText = await response.text();
+                    data = JSON.parse(responseText);
+                } catch (parseError) {
+                    // JSONパースに失敗した場合、生のレスポンステキストを使用
+                    data = { error: `レスポンスの解析に失敗: ${responseText}` };
+                }
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result">
+                            <h3>翻訳結果：</h3>
+                            <p><strong>元のテキスト:</strong> ${data.originalText}</p>
+                            <p><strong>翻訳結果:</strong> ${data.translatedText}</p>
+                            <p><small>検出された言語: ${data.sourceLang} → ${data.targetLang}</small></p>
+                        </div>
+                    `;
+                } else {
+                    // HTTPエラーの詳細情報を表示
+                    const errorMessage = data.error || data.message || `HTTPエラー: ${response.status} ${response.statusText}`;
+                    throw new Error(errorMessage);
+                }
+            } catch (error) {
+                console.error('詳細エラー情報:', error);
+                
+                let errorDetails = '';
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    errorDetails = 'ネットワークエラー: APIサーバーに接続できません';
+                } else if (error.message.includes('JSON')) {
+                    errorDetails = 'レスポンス形式エラー: サーバーから無効なレスポンスが返されました';
+                } else {
+                    errorDetails = error.message;
+                }
+                
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <h3>🚨 エラーが発生しました</h3>
+                        <p><strong>エラー内容:</strong> ${errorDetails}</p>
+                        <details style="margin-top: 10px;">
+                            <summary style="cursor: pointer; font-weight: bold;">詳細情報を表示</summary>
+                            <div style="margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 5px; font-family: monospace; font-size: 12px;">
+                                <p><strong>エラータイプ:</strong> ${error.name}</p>
+                                <p><strong>エラーメッセージ:</strong> ${error.message}</p>
+                                <p><strong>API URL:</strong> ${API_URL}</p>
+                                <p><strong>リクエストデータ:</strong></p>
+                                <pre>${JSON.stringify({
+                                    text: inputText,
+                                    sourceLang: sourceLang,
+                                    targetLang: targetLang
+                                }, null, 2)}</pre>
+                            </div>
+                        </details>
+                        <p style="margin-top: 15px;"><small>💡 問題が解決しない場合は、ブラウザの開発者ツール（F12）のコンソールタブで詳細なログを確認してください。</small></p>
+                    </div>
+                `;
+            } finally {
+                // ボタンを有効化
+                translateBtn.disabled = false;
+                translateBtn.textContent = '🔄 翻訳する';
+            }
+        });
+
+        // ページ読み込み時の初期化
+        window.addEventListener('load', () => {
+            console.log('API URL:', API_URL);
+        });
+    </script>
+</body>
+</html> 
