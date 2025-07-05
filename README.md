@@ -4,18 +4,32 @@
 
 ## アーキテクチャ
 
-```
-ユーザーのWebブラウザ
-    ↓ (GET /)
-API Gateway
-    ↓ (S3直接統合)
-S3バケット (静的ファイル保存)
-    ↓ (POST /translate)
-API Gateway
-    ↓ (Lambda呼び出し)
-翻訳処理Lambda関数
-    ↓ (翻訳リクエスト)
-Amazon Translate
+```mermaid
+%%{init: {'theme':'default', 'look': 'handDrawn'}}%%
+graph LR
+  subgraph "フロントエンド"
+    A["Webブラウザ"]
+  end
+
+  subgraph "バックエンド"
+    B[("S3バケット<br/>(HTMLアプリ静的ホスティング)")]
+    C["API Gateway"]
+    D["Lambda関数<br/>(翻訳処理)"]
+    E["Amazon Translate"]
+    F["Amazon Comprehend"]
+    A-->|"Webページ取得<br/>(GET /)"|C
+    C-->|"S3直接統合"|B
+    B-->|"HTMLファイル"|C
+    C-->|"Webページ"|A
+    A-->|"翻訳リクエスト<br/>(POST /translate)"|C
+    C-->|"Lambda呼び出し"|D
+    D-->|"翻訳リクエスト<br/>(sourceLang: auto)"|E
+    E-->|"言語検出要求"|F
+    F-->|"検出された言語"|E
+    E-->|"翻訳結果"|D
+    D-->|"レスポンス"|C
+    C-->|"APIレスポンス"|A
+  end
 ```
 
 ## 構成要素
@@ -27,13 +41,6 @@ Amazon Translate
 - **翻訳処理Lambda関数**: 翻訳処理を行うサーバーレス関数
 - **Amazon Translate**: 多言語翻訳サービス
 - **IAMロール**: API GatewayがS3にアクセスするための権限
-
-## 改善点（v2.0）
-
-- **パフォーマンス向上**: Lambda関数を経由せずにS3から直接ファイルを配信
-- **コスト削減**: 静的ファイル配信のLambda実行コストを削減
-- **レスポンス時間短縮**: Lambda関数のコールドスタート時間を排除
-- **シンプルなアーキテクチャ**: 不要なLambda関数を削除
 
 ## 前提条件
 
