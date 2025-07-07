@@ -1,10 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
+import {
+  aws_s3 as s3,
+  aws_lambda as lambda,
+  aws_apigateway as apigateway,
+  aws_iam as iam,
+  aws_s3_deployment as s3deploy,
+} from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
-import * as apigateway from 'aws-cdk-lib/aws-apigateway';
-import * as iam from 'aws-cdk-lib/aws-iam';
-import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 
 export class AppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -15,10 +17,17 @@ export class AppStack extends cdk.Stack {
       bucketName: `translate-website-${this.account}-${this.region}`,
       publicReadAccess: false, // API Gateway経由でアクセスするためpublicアクセスは無効
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // バケット削除時にオブジェクトも削除
+      autoDeleteObjects: true, // バケット削除時にオブジェクトも削除
     });
 
+    // フロントエンドファイルのデプロイ
+    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
+      sources: [s3deploy.Source.asset('./frontend')],
+      destinationBucket: websiteBucket,
+    });
+    
+    
     // Lambda関数（翻訳処理用）
     const translateFunction = new lambda.Function(this, 'TranslateFunction', {
       runtime: lambda.Runtime.NODEJS_22_X,
@@ -37,21 +46,6 @@ export class AppStack extends cdk.Stack {
       resources: ['*']
     }));
 
-    // API GatewayがS3にアクセスするためのIAMロール
-    const apiGatewayS3Role = new iam.Role(this, 'ApiGatewayS3Role', {
-      assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
-      inlinePolicies: {
-        S3ReadPolicy: new iam.PolicyDocument({
-          statements: [
-            new iam.PolicyStatement({
-              effect: iam.Effect.ALLOW,
-              actions: ['s3:GetObject'],
-              resources: [`${websiteBucket.bucketArn}/*`]
-            })
-          ]
-        })
-      }
-    });
 
     // API Gateway（REST API）
     const api = new apigateway.RestApi(this, 'TranslateApi', {
@@ -69,20 +63,28 @@ export class AppStack extends cdk.Stack {
       ]
     });
 
-    // 翻訳用Lambda統合（プロキシ統合）
+    // 翻訳用Lambda統合
     const translateIntegration = new apigateway.LambdaIntegration(translateFunction);
 
     // /translateエンドポイントの作成
     const translateResource = api.root.addResource('translate');
     translateResource.addMethod('POST', translateIntegration);
 
-    // ルートパス（/）用のS3統合 - index.htmlを返す
+    // API GatewayがS3にアクセスするためのIAMロール
+    const apiGatewayS3AccessRole = new iam.Role(this, 'ApiGatewayS3AccessRole', {
+      assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+    });
+
+    // S3バケットの読み取り権限をAPI Gatewayに付与
+    websiteBucket.grantRead(apiGatewayS3AccessRole);
+
+    // ルートパス（/）用のS3統合 - S3バケットのindex.htmlを返す
     const rootIntegration = new apigateway.AwsIntegration({
       service: 's3',
       integrationHttpMethod: 'GET',
       path: `${websiteBucket.bucketName}/index.html`,
       options: {
-        credentialsRole: apiGatewayS3Role,
+        credentialsRole: apiGatewayS3AccessRole,
         passthroughBehavior: apigateway.PassthroughBehavior.WHEN_NO_TEMPLATES,
         integrationResponses: [
           {
@@ -130,7 +132,7 @@ export class AppStack extends cdk.Stack {
       integrationHttpMethod: 'GET',
       path: `${websiteBucket.bucketName}/{proxy}`,
       options: {
-        credentialsRole: apiGatewayS3Role,
+        credentialsRole: apiGatewayS3AccessRole,
         passthroughBehavior: apigateway.PassthroughBehavior.WHEN_NO_TEMPLATES,
         requestParameters: {
           'integration.request.path.proxy': 'method.request.path.proxy'
@@ -177,13 +179,6 @@ export class AppStack extends cdk.Stack {
           statusCode: '500'
         }
       ]
-    });
-
-    // フロントエンドファイルのデプロイ
-    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
-      sources: [s3deploy.Source.asset('./frontend')],
-      destinationBucket: websiteBucket,
-      prune: true, // 古いファイルを削除
     });
 
     // 出力値の設定
